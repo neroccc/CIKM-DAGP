@@ -2,10 +2,6 @@
 
 DAGP: Difficulty-Aware Graph Pruning for Multi-Agent Reasoning with Large Language Models
 
-<div align="center">
-    <img src="image/README/logo.png" width=200></img>
-    <p class="image-caption">AgentDropout: Dynamic Agent Elimination for Token-Efficient and High-Performance LLM-Based Multi-Agent Collaboration</p>
-</div>
 
 #
 1. **Environment Setup**:
