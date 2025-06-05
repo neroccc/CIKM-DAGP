@@ -58,6 +58,6 @@ python experiments/run_gsm8k.py \
 
 
 
-## **💡 Acknowledgments**<a name="acknowledgments"></a>
+#Acknowledgments
 
-Code framework based on [GPTSwarm](https://github.com/metauto-ai/GPTSwarm) and [AgentPrune](https://github.com/yanweiyue/AgentPrune).
+Code framework based on [GPTSwarm](https://github.com/metauto-ai/GPTSwarm), [AgentPrune](https://github.com/yanweiyue/AgentPrune) and [AgentDropout](https://github.com/wangzx1219/AgentDropout).
