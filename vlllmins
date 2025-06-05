@@ -1,0 +1,12 @@
+python3 -m vllm.entrypoints.openai.api_server \
+  --model meta-llama/Meta-Llama-3-8B-Instruct \
+  --port 8000
+
+   conda activate myenv
+
+
+
+
+
+
+
