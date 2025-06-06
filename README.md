@@ -34,12 +34,13 @@ base_url = "http://localhost:5000/v1"
 4. **Fine-tuning Difficulty Estimation Module**:
 ```bash
 # Fine-tuning Deepseek-Coder-1.3B locally.
-```
 python run.py
+```
+
 # Quick Start
 
 Run DAGP on GSM8K (other datasets are similar): 
-
+```bash
 python experiments/run_gsm8k.py \
   --agent_nums 5 \
   --mode FullConnected \
@@ -53,7 +54,7 @@ python experiments/run_gsm8k.py \
   --optimized_temporal \
   --diff \
   --dec
-
+```
 
 
 
