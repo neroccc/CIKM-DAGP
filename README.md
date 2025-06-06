@@ -48,7 +48,7 @@ python experiments/run_humaneval.py \
   --num_iterations 2 \
   --imp_per_iterations 1 \
   --pruning_rate 0.10 \
-  --num_rounds 2 \
+  --num_rounds 4 \
   --llm_name /data/models/Meta-Llama-3-8B-Instruct \
   --optimized_spatial \
   --optimized_temporal \
