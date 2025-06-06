@@ -31,8 +31,8 @@ CUDA_VISIBLE_DEVICES=0 vllm serve /path/to/model --dtype auto --api-key API_KEYS
 api_key = API_KEYS
 base_url = "http://localhost:5000/v1"
 ```
-
-
+4. **Fine-tuning Difficulty Estimation Module**:
+python run.py
 # Quick Start
 
 Run DAGP on GSM8K (other datasets are similar): 
