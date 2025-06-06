@@ -1,7 +1,7 @@
 # DAGP
 
-DAGP: Difficulty-Aware Graph Pruning for Multi-Agent Reasoning with Large Language Models
-
+This project implements framework for DAGP: Difficulty-Aware Graph Pruning for Multi-Agent Reasoning with Large Language Models.
+The Experiment folder contains functions for reproducing experiments, the DAGP folder contains functions implementing DAGP, and the Dataset folder includes the datasets utilized in the experiments.
 
 #
 1. **Environment Setup**:
@@ -32,6 +32,9 @@ api_key = API_KEYS
 base_url = "http://localhost:5000/v1"
 ```
 4. **Fine-tuning Difficulty Estimation Module**:
+```bash
+# Fine-tuning Deepseek-Coder-1.3B locally.
+```
 python run.py
 # Quick Start
 
