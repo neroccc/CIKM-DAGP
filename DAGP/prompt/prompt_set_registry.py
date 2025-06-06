@@ -1,7 +1,7 @@
 from typing import Type
 from class_registry import ClassRegistry
 
-from AgentDropout.prompt.prompt_set import PromptSet
+from DAGP.prompt.prompt_set import PromptSet
 
 class PromptSetRegistry:
     registry = ClassRegistry()

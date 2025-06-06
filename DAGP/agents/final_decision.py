@@ -1,10 +1,10 @@
 from typing import List,Any,Dict
 
-from AgentDropout.graph.node import Node
-from AgentDropout.agents.agent_registry import AgentRegistry
-from AgentDropout.llm.llm_registry import LLMRegistry
-from AgentDropout.prompt.prompt_set_registry import PromptSetRegistry
-from AgentDropout.tools.coding.python_executor import PyExecutor
+from DAGP.graph.node import Node
+from DAGP.agents.agent_registry import AgentRegistry
+from DAGP.llm.llm_registry import LLMRegistry
+from DAGP.prompt.prompt_set_registry import PromptSetRegistry
+from DAGP.tools.coding.python_executor import PyExecutor
 
 @AgentRegistry.register('FinalWriteCode')
 class FinalWriteCode(Node):

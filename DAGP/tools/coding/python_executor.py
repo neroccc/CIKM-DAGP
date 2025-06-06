@@ -5,8 +5,8 @@ import ast
 import astunparse
 from typing import List
 
-from AgentDropout.tools.coding.executor_utils import function_with_timeout
-from AgentDropout.tools.coding.executor_types import ExecuteResult, Executor
+from DAGP.tools.coding.executor_utils import function_with_timeout
+from DAGP.tools.coding.executor_types import ExecuteResult, Executor
 import timeout_decorator
 
 def get_call_str(assert_statement: str) -> str:

@@ -14,17 +14,17 @@ import random
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.stdout.reconfigure(encoding='utf-8')
 
-from AgentDropout.utils.const import AgentPrune_ROOT
-from AgentDropout.graph.graph import Graph
-from AgentDropout.tools.reader.readers import JSONLReader, JSONReader
-from AgentDropout.utils.globals import Time
-from AgentDropout.utils.globals import Cost, PromptTokens, CompletionTokens
-from AgentDropout.utils.utils import nuclear_norm,frobenius_norm
+from DAGP.utils.const import AgentPrune_ROOT
+from DAGP.graph.graph import Graph
+from DAGP.tools.reader.readers import JSONLReader, JSONReader
+from DAGP.utils.globals import Time
+from DAGP.utils.globals import Cost, PromptTokens, CompletionTokens
+from DAGP.utils.utils import nuclear_norm,frobenius_norm
 from datasets.gsm8k_dataset import gsm_data_process,gsm_get_predict,svamp_data_process, multiarith_data_process
 from datasets.aqua_dataset import aqua_data_process,aqua_get_predict
-from AgentDropout.utils.globals import PromptTokens, CompletionTokens
-from AgentDropout.agents.agent_registry import AgentRegistry
-
+from DAGP.utils.globals import PromptTokens, CompletionTokens
+from DAGP.agents.agent_registry import AgentRegistry
+from ddc import calculate_D
 def load_result(result_file):
     if not result_file.exists():
         with open(result_file, 'w',encoding='utf-8') as file:
@@ -77,6 +77,7 @@ def parse_args():
     return args
 
 async def main():
+    #module1
     args = parse_args()
     result_file = None
     dataset = JSONLReader.parse_file(args.dataset_json)
@@ -91,7 +92,6 @@ async def main():
     result_file = result_dir / f"{args.domain}_llama3_{current_time}.json"
     print(args.agent_names)
     agent_names = [name for name,num in zip(args.agent_names,args.agent_nums) for _ in range(num)]
-    # print(args.agent_names)
     decision_method = args.decision_method
     kwargs = get_kwargs(args.mode,len(agent_names))
 
@@ -105,15 +105,33 @@ async def main():
                 diff=args.diff,
                 dec=args.dec,
                 **kwargs)
-    
+    # module2
+    controller_params = [
+            graph.controller_weights,
+            graph.controller_bias,
+            graph.sparsity_base,
+            graph.sparsity_delta1,
+            graph.sparsity_delta2
+        ]
+
     if args.dec:
         graph.optimized_spatial=False
         graph.optimized_temporal=False
         total_solved, total_executed = (0, 0)
+
+
         if not graph.diff:
-            optimizer = torch.optim.Adam([graph.spatial_logits_1,graph.temporal_logits_1], lr=args.lr)
+            optimizer = torch.optim.Adam(
+                [graph.spatial_logits_1, graph.temporal_logits_1] + controller_params,
+                lr=args.lr
+            )
         else:
-            optimizer = torch.optim.Adam(list(graph.spatial_logits_1.parameters()) + list(graph.temporal_logits_1.parameters()),lr=args.lr)
+            optimizer = torch.optim.Adam(
+                list(graph.spatial_logits_1.parameters()) +
+                list(graph.temporal_logits_1.parameters()) +
+                controller_params,
+                lr=args.lr
+            )
         for i_batch in range(2):
             print(f"Train batch {i_batch}",80*'-')
             start_ts = time.time()
@@ -127,10 +145,12 @@ async def main():
                 break
             
             for i_record, record in enumerate(current_batch):
+                task = record["task"]
+                D = calculate_D(task)
                 realized_graph = copy.deepcopy(graph)
                 realized_graph.spatial_logits_1 = graph.spatial_logits_1
                 realized_graph.temporal_logits_1 = graph.temporal_logits_1
-                
+                realized_graph.set_difficulty_tensor(torch.tensor(D, dtype=torch.float32))
                 if not graph.diff:
                     spatial_matrix_train = realized_graph.spatial_logits_1.reshape((sum(args.agent_nums),sum(args.agent_nums)))
                     temporal_matrix_train = realized_graph.temporal_logits_1.reshape((sum(args.agent_nums),sum(args.agent_nums)))
@@ -149,8 +169,10 @@ async def main():
                     loss_t = torch.mean(torch.stack([nuclear_norm(matrix) for matrix in temporal_matrix_train]))
                     frob_loss_s = torch.mean(torch.stack([frobenius_norm(spatial_matrix_fixed, matrix) for matrix in spatial_matrix_train]))
                     frob_loss_t = torch.mean(torch.stack([frobenius_norm(temporal_matrix_fixed, matrix) for matrix in temporal_matrix_train]))
-                add_loss = loss_s + loss_t + F.relu(frob_loss_s - args.delta) + F.relu(frob_loss_t - args.delta)
 
+                sparsity_weight = graph.get_sparsity_weight(D)
+                add_loss = sparsity_weight * (loss_s + loss_t) + F.relu(frob_loss_s - args.delta) + F.relu(frob_loss_t - args.delta)
+                add_loss = 0
                 task = record["task"]
                 step = record["step"]
                 answer = record["answer"]
@@ -158,7 +180,8 @@ async def main():
                 input_dict = {"task": task}
                 answer_log_probs.append(asyncio.create_task(realized_graph.arun(input_dict,args.num_rounds,skip=True)))
                 add_losses.append(add_loss)
-                
+
+
             raw_results = await asyncio.gather(*answer_log_probs)
             raw_answers, log_probs, sp_per_round, tp_per_round, edge_counts = zip(*raw_results)
             loss_list: List[torch.Tensor] = []
@@ -187,7 +210,7 @@ async def main():
                     "Accuracy": accuracy
                 }
                 data.append(updated_item)
-                #print(f"##########Final Log:{json.dumps(updated_item)}")
+
             with open(result_file, 'w',encoding='utf-8') as file:
                 json.dump(data, file, indent=4)
             
@@ -210,10 +233,11 @@ async def main():
             print("Temporal logits:", graph.temporal_logits_1)
             print("Spatial probs:", spatial_probs)
             print("Temporal probs:", temporal_probs)
+            print("Spatial masks:", graph.spatial_masks)
+            print("Temporal logits:", graph.temporal_masks)
+
             spatial_mask_values = [param.data.tolist() for param in graph.spatial_masks]
             print("Spatial masks as list of lists:", spatial_mask_values)
-
-            # Collect temporal mask values into a list
             temporal_mask_values = [param.data.tolist() for param in graph.temporal_masks]
             print("Temporal masks as list of lists:", temporal_mask_values)
             
@@ -237,7 +261,8 @@ async def main():
 
         # 2. 调用 DEC 阶段剪枝
         graph.update_masks_dec()
-
+        saved_spatial_masks = [mask.detach().clone() for mask in graph.spatial_masks]
+        saved_temporal_masks = [mask.detach().clone() for mask in graph.temporal_masks]
         # 3. 获取更新后的新 masks
         if isinstance(graph.spatial_masks, torch.nn.ParameterList):
             new_spatial = [mask for mask in graph.spatial_masks]
@@ -267,12 +292,22 @@ async def main():
         for round_i, u, v in removed_temporal:
             print(f"[DEC] Round {round_i} 删除了 temporal 边：{u} -> {v}")
 
+    #step3
 
     if not graph.diff:
-        optimizer = torch.optim.Adam([graph.spatial_logits,graph.temporal_logits], lr=args.lr)    
+        optimizer = torch.optim.Adam(
+            [graph.spatial_logits, graph.temporal_logits] + controller_params,
+            lr=args.lr
+        )
     else:
-        optimizer = torch.optim.Adam(list(graph.spatial_logits.parameters()) + list(graph.temporal_logits.parameters()),lr=args.lr)  
-    
+        optimizer = torch.optim.Adam(
+            list(graph.base_spatial_logits.parameters()) +
+            list(graph.base_temporal_logits.parameters()) +
+            list(graph.spatial_logit_mlps.parameters()) +
+            list(graph.temporal_logit_mlps.parameters()) +
+            controller_params,
+            lr=args.lr
+        )
     num_batches = int(len(dataset)/args.batch_size)
     total_solved, total_executed = (0, 0)
     
@@ -293,16 +328,23 @@ async def main():
                 break
             
             for i_record, record in enumerate(current_batch):
+                task = record["task"]
+                D = calculate_D(task)
+                graph.set_difficulty_tensor(torch.tensor(D, dtype=torch.float32))
                 realized_graph = copy.deepcopy(graph)
-                realized_graph.spatial_logits = graph.spatial_logits
-                realized_graph.temporal_logits = graph.temporal_logits
-                
+
                 if not graph.diff:
-                    spatial_matrix_train = realized_graph.spatial_logits.reshape((sum(args.agent_nums),sum(args.agent_nums)))
-                    temporal_matrix_train = realized_graph.temporal_logits.reshape((sum(args.agent_nums),sum(args.agent_nums)))
+                    spatial_matrix_train = realized_graph.base_spatial_logits.reshape((sum(args.agent_nums), sum(args.agent_nums)))
+                    temporal_matrix_train = realized_graph.base_temporal_logits.reshape((sum(args.agent_nums), sum(args.agent_nums)))
                 else:
-                    spatial_matrix_train = [param.reshape((sum(args.agent_nums), sum(args.agent_nums))) for param in realized_graph.spatial_logits]
-                    temporal_matrix_train = [param.reshape((sum(args.agent_nums), sum(args.agent_nums))) for param in realized_graph.temporal_logits]
+                    spatial_matrix_train = [
+                        (realized_graph.base_spatial_logits[i] + realized_graph.spatial_logit_mlps[i](graph.current_difficulty_tensor)).reshape((sum(args.agent_nums), sum(args.agent_nums)))
+                        for i in range(args.num_rounds)
+                    ]
+                    temporal_matrix_train = [
+                        (realized_graph.base_temporal_logits[i] + realized_graph.temporal_logit_mlps[i](graph.current_difficulty_tensor)).reshape((sum(args.agent_nums), sum(args.agent_nums)))
+                        for i in range(args.num_rounds - 1)
+                    ]
                 spatial_matrix_fixed = torch.tensor(kwargs["fixed_spatial_masks"],dtype=torch.float32).reshape((len(agent_names),len(agent_names)))
                 temporal_matrix_fixed = torch.tensor(kwargs["fixed_temporal_masks"],dtype=torch.float32).reshape((len(agent_names),len(agent_names)))
                 if not graph.diff:
@@ -315,9 +357,12 @@ async def main():
                     loss_t = torch.mean(torch.stack([nuclear_norm(matrix) for matrix in temporal_matrix_train]))
                     frob_loss_s = torch.mean(torch.stack([frobenius_norm(spatial_matrix_fixed, matrix) for matrix in spatial_matrix_train]))
                     frob_loss_t = torch.mean(torch.stack([frobenius_norm(temporal_matrix_fixed, matrix) for matrix in temporal_matrix_train]))
-                add_loss = loss_s + loss_t + F.relu(frob_loss_s - args.delta) + F.relu(frob_loss_t - args.delta)
+                sparsity_weight = graph.get_sparsity_weight(D)
+                add_loss = sparsity_weight * (loss_s + loss_t) + F.relu(frob_loss_s - args.delta) + F.relu(frob_loss_t - args.delta)
+
                 
                 task = record["task"]
+                graph.adjust_graph_structure(D)
                 step = record["step"]
                 answer = record["answer"]
                 answers.append(answer)
@@ -353,7 +398,7 @@ async def main():
                     "Accuracy": accuracy
                 }
                 data.append(updated_item)
-                #print(f"##########Final Log:{json.dumps(updated_item)}")
+
             with open(result_file, 'w',encoding='utf-8') as file:
                 json.dump(data, file, indent=4)
             
@@ -366,31 +411,44 @@ async def main():
                 spatial_probs = torch.sigmoid(graph.spatial_logits)
                 temporal_probs = torch.sigmoid(graph.temporal_logits)
             else:
-                spatial_probs = [torch.sigmoid(logit) for logit in graph.spatial_logits]
-                temporal_probs = [torch.sigmoid(logit) for logit in graph.temporal_logits]
+                spatial_probs = [
+                    torch.sigmoid(graph.base_spatial_logits[i] + graph.spatial_logit_mlps[i](graph.current_difficulty_tensor))
+                    for i in range(args.num_rounds)
+                ]
+                temporal_probs = [
+                    torch.sigmoid(graph.base_temporal_logits[i] + graph.temporal_logit_mlps[i](graph.current_difficulty_tensor))
+                    for i in range(args.num_rounds - 1)
+                ]
             
             print(f"Batch time {time.time() - start_ts:.3f}")
             print(f"Accuracy: {accuracy}")
             print("utilities:", utilities)
             print("loss:", total_loss.item())
-            # print("Spatial logits Grad:", graph.spatial_logits.grad)
-            # print("Temporal logits Grad:", graph.spatial_logits.grad)
-            print("Spatial logits:", graph.spatial_logits)
-            print("Temporal logits:", graph.temporal_logits)
+            if not graph.diff:
+                print("Spatial logits:", graph.base_spatial_logits)
+                print("Temporal logits:", graph.base_temporal_logits)
+            else:
+                for i in range(args.num_rounds):
+                    logits_i = graph.base_spatial_logits[i] + graph.spatial_logit_mlps[i](graph.current_difficulty_tensor)
+                    print(f"Spatial logits (round {i}):", logits_i)
+                for i in range(args.num_rounds - 1):
+                    logits_i = graph.base_temporal_logits[i] + graph.temporal_logit_mlps[i](graph.current_difficulty_tensor)
+                    print(f"Temporal logits (round {i}):", logits_i)
             print("Spatial probs:", spatial_probs)
             print("Temporal probs:", temporal_probs)
+            print("Spatial masks:", graph.spatial_masks)
+            print("Temporal logits:", graph.temporal_masks)
             spatial_mask_values = [param.data.tolist() for param in graph.spatial_masks]
             print("Spatial masks as list of lists:", spatial_mask_values)
 
             # Collect temporal mask values into a list
             temporal_mask_values = [param.data.tolist() for param in graph.temporal_masks]
             print("Temporal masks as list of lists:", temporal_mask_values)
-            
             if (i_batch+1)%2 == 0 and i_batch < 4 and (args.optimized_spatial or args.optimized_temporal):
                 if not graph.diff:
-                    spatial_masks, temporal_masks = graph.update_masks(args.pruning_rate)
+                    spatial_masks, temporal_masks = graph.update_masks(graph.dynamic_pruning_rate)
                 else:
-                    spatial_masks, temporal_masks = graph.update_masks_diff(args.pruning_rate)
+                    spatial_masks, temporal_masks = graph.update_masks_diff(graph.dynamic_pruning_rate)
                 print("spatial masks:",spatial_masks)
                 print("temporal masks:",temporal_masks)
                 if not graph.diff:
@@ -405,30 +463,31 @@ async def main():
             print(f"Cost {Cost.instance().value}")
             print(f"PromptTokens {PromptTokens.instance().value}")
             print(f"CompletionTokens {CompletionTokens.instance().value}")
-
+    #step4
     PromptTokens.instance().reset()
     CompletionTokens.instance().reset()
     total_solved, total_executed = (0, 0)
 
-
-
+    # 打印初始 mask（不影响 diff=true）
     spatial_mask_values = [param.data.tolist() for param in graph.spatial_masks]
     print("Spatial masks as list of lists:", spatial_mask_values)
-
-            # Collect temporal mask values into a list
     temporal_mask_values = [param.data.tolist() for param in graph.temporal_masks]
     print("Temporal masks as list of lists:", temporal_mask_values)
-    if not graph.diff:
-                spatial_prob_values = torch.sigmoid(graph.spatial_logits).detach().cpu().tolist()
-    else:
-                spatial_prob_values = [torch.sigmoid(logit).detach().cpu().tolist() for logit in graph.spatial_logits]
-    print("Spatial probs as list of lists:", spatial_prob_values)
 
-            # 输出 temporal probs
+    # 打印 logits → probs
     if not graph.diff:
-                temporal_prob_values = torch.sigmoid(graph.temporal_logits).detach().cpu().tolist()
+        spatial_prob_values = torch.sigmoid(graph.base_spatial_logits).detach().cpu().tolist()
+        temporal_prob_values = torch.sigmoid(graph.base_temporal_logits).detach().cpu().tolist()
     else:
-                temporal_prob_values = [torch.sigmoid(logit).detach().cpu().tolist() for logit in graph.temporal_logits]
+        spatial_prob_values = [
+            torch.sigmoid(graph.base_spatial_logits[i] + graph.spatial_logit_mlps[i](graph.current_difficulty_tensor)).detach().cpu().tolist()
+            for i in range(args.num_rounds)
+        ]
+        temporal_prob_values = [
+            torch.sigmoid(graph.base_temporal_logits[i] + graph.temporal_logit_mlps[i](graph.current_difficulty_tensor)).detach().cpu().tolist()
+            for i in range(args.num_rounds - 1)
+        ]
+    print("Spatial probs as list of lists:", spatial_prob_values)
     print("Temporal probs as list of lists:", temporal_prob_values)
 
 
@@ -445,21 +504,38 @@ async def main():
         if current_batch is None:
             print("No more data available.")
             break
-        
-        for i_record, record in enumerate(current_batch):
 
+        for i_record, record in enumerate(current_batch):
+            task = record["task"]
+            D = calculate_D(task)
             realized_graph = copy.deepcopy(graph)
-            realized_graph.spatial_logits = graph.spatial_logits
-            realized_graph.temporal_logits = graph.temporal_logits
-            
-            if not graph.diff:
-                spatial_matrix_train = realized_graph.spatial_logits.reshape((sum(args.agent_nums),sum(args.agent_nums)))
-                temporal_matrix_train = realized_graph.temporal_logits.reshape((sum(args.agent_nums),sum(args.agent_nums)))
+            realized_graph.set_difficulty_tensor(torch.tensor(D, dtype=torch.float32))
+            realized_graph.adjust_graph_structure(D)
+            for i in range(graph.rounds):
+                realized_graph.spatial_masks[i].data = saved_spatial_masks[i].clone()
+            for i in range(graph.rounds - 1):
+                realized_graph.temporal_masks[i].data = saved_temporal_masks[i].clone()
+            if args.diff:
+                realized_graph.refine_masks_from_existing(realized_graph.dynamic_pruning_rate)
             else:
-                spatial_matrix_train = [param.reshape((sum(args.agent_nums), sum(args.agent_nums))) for param in realized_graph.spatial_logits]
-                temporal_matrix_train = [param.reshape((sum(args.agent_nums), sum(args.agent_nums))) for param in realized_graph.temporal_logits]
+                realized_graph.update_masks(realized_graph.dynamic_pruning_rate)            
+            if not graph.diff:
+                spatial_matrix_train = realized_graph.base_spatial_logits.reshape((sum(args.agent_nums), sum(args.agent_nums)))
+                temporal_matrix_train = realized_graph.base_temporal_logits.reshape((sum(args.agent_nums), sum(args.agent_nums)))
+            else:
+                spatial_matrix_train = [
+                    (realized_graph.base_spatial_logits[i] + realized_graph.spatial_logit_mlps[i](realized_graph.current_difficulty_tensor)).reshape((sum(args.agent_nums), sum(args.agent_nums)))
+                    for i in range(args.num_rounds)
+                ]
+                temporal_matrix_train = [
+                    (realized_graph.base_temporal_logits[i] + realized_graph.temporal_logit_mlps[i](realized_graph.current_difficulty_tensor)).reshape((sum(args.agent_nums), sum(args.agent_nums)))
+                    for i in range(args.num_rounds - 1)
+                ]
             spatial_matrix_fixed = torch.tensor(kwargs["fixed_spatial_masks"],dtype=torch.float32).reshape((len(agent_names),len(agent_names)))
             temporal_matrix_fixed = torch.tensor(kwargs["fixed_temporal_masks"],dtype=torch.float32).reshape((len(agent_names),len(agent_names)))
+
+  
+
             if not graph.diff:
                 loss_s = nuclear_norm(spatial_matrix_train)
                 loss_t = nuclear_norm(temporal_matrix_train)
@@ -470,23 +546,24 @@ async def main():
                 loss_t = torch.mean(torch.stack([nuclear_norm(matrix) for matrix in temporal_matrix_train]))
                 frob_loss_s = torch.mean(torch.stack([frobenius_norm(spatial_matrix_fixed, matrix) for matrix in spatial_matrix_train]))
                 frob_loss_t = torch.mean(torch.stack([frobenius_norm(temporal_matrix_fixed, matrix) for matrix in temporal_matrix_train]))
-            add_loss = loss_s + loss_t + F.relu(frob_loss_s - args.delta) + F.relu(frob_loss_t - args.delta)
+            sparsity_weight = graph.get_sparsity_weight(D)
+            add_loss = sparsity_weight * (loss_s + loss_t) + F.relu(frob_loss_s - args.delta) + F.relu(frob_loss_t - args.delta)
             
             task = record["task"]
             step = record["step"]
             answer = record["answer"]
             answers.append(answer)
             input_dict = {"task": task}
-
             if args.dec:
                 answer_log_probs.append(asyncio.create_task(realized_graph.arun(input_dict,args.num_rounds)))
             else:
                 answer_log_probs.append(asyncio.create_task(realized_graph.arun(input_dict,args.num_rounds)))
             add_losses.append(add_loss)
         
+
         raw_results = await asyncio.gather(*answer_log_probs)
         raw_answers, log_probs, sp_per_round, tp_per_round, edge_counts = zip(*raw_results)
-
+        
         batch_spatial = sum(sp for sp, _ in edge_counts)
         batch_temporal = sum(tp for _, tp in edge_counts)
         grand_spatial += batch_spatial
@@ -499,7 +576,6 @@ async def main():
         for task, answer, log_prob, add_loss, true_answer in zip(current_batch, raw_answers, log_probs, add_losses, answers):
             predict_answer = gsm_get_predict(answer[0])
             is_solved = float(predict_answer)==float(true_answer)
-            # is_solved = predict_answer==true_answer
             total_solved = total_solved + is_solved
             total_executed = total_executed + 1
             accuracy = total_solved/ total_executed
@@ -519,10 +595,8 @@ async def main():
                 "Accuracy": accuracy
             }
             data.append(updated_item)
-            #print(f"##########Final Log:{json.ffdumps(updated_item)}")
         with open(result_file, 'w',encoding='utf-8') as file:
             json.dump(data, file, indent=4)
-        
         
         print(f"Batch time {time.time() - start_ts:.3f}")
         print(f"Accuracy: {accuracy}")

@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 
-from AgentDropout.utils.log import logger
-from AgentDropout.environment.tools.coding.python_executor import PyExecutor
-from AgentDropout.environment.tools.coding.executor_types import Executor
+from DAGP.utils.log import logger
+from DAGP.environment.tools.coding.python_executor import PyExecutor
+from DAGP.environment.tools.coding.executor_types import Executor
 
 EXECUTOR_MAPPING = {
     "py": PyExecutor,

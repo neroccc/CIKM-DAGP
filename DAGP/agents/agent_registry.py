@@ -1,7 +1,7 @@
 from typing import Type
 from class_registry import ClassRegistry
 
-from AgentDropout.graph import Node
+from DAGP.graph import Node
 
 
 class AgentRegistry:

@@ -7,17 +7,17 @@ from typing import Union,Literal,Optional,Iterator,List,Any,Dict
 from tqdm import tqdm
 import copy
 import time
-from AgentDropout.utils.globals import Time
+from DAGP.utils.globals import Time
 from pathlib import Path
 import sys
 import torch
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.stdout.reconfigure(encoding='utf-8')
 
-from AgentDropout.utils.const import AgentPrune_ROOT
-from AgentDropout.graph.graph import Graph
+from DAGP.utils.const import AgentPrune_ROOT
+from DAGP.graph.graph import Graph
 from experiments.accuracy import Accuracy
-from AgentDropout.utils.globals import Cost, PromptTokens, CompletionTokens
+from DAGP.utils.globals import Cost, PromptTokens, CompletionTokens
 from ddc import calculate_D
 async def evaluate(
         saved_spatial_masks, 
@@ -31,7 +31,7 @@ async def evaluate(
         args=None,
         ) -> float:
 
-    print(f"Evaluating AgentDropout on {dataset.__class__.__name__} split {dataset.split}")
+    print(f"Evaluating DAGP on {dataset.__class__.__name__} split {dataset.split}")
     
     if not graph.diff:
         graph.spatial_logits.requires_grad_(False)

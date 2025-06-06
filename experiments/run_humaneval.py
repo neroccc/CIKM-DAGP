@@ -14,13 +14,13 @@ import random
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.stdout.reconfigure(encoding='utf-8')
 
-from AgentDropout.graph.graph import Graph
-from AgentDropout.tools.reader.readers import JSONLReader
-from AgentDropout.tools.coding.python_executor import PyExecutor
-from AgentDropout.utils.globals import Time
-from AgentDropout.utils.const import AgentPrune_ROOT
-from AgentDropout.utils.globals import Cost, PromptTokens, CompletionTokens
-from AgentDropout.utils.utils import nuclear_norm,frobenius_norm
+from DAGP.graph.graph import Graph
+from DAGP.tools.reader.readers import JSONLReader
+from DAGP.tools.coding.python_executor import PyExecutor
+from DAGP.utils.globals import Time
+from DAGP.utils.const import AgentPrune_ROOT
+from DAGP.utils.globals import Cost, PromptTokens, CompletionTokens
+from DAGP.utils.utils import nuclear_norm,frobenius_norm
 from ddc import calculate_D
 def load_result(result_file):
     if not result_file.exists():

@@ -8,19 +8,14 @@ from openai import AsyncOpenAI
 import async_timeout
 #from transformers import AutoTokenizer
 
-from AgentDropout.llm.format import Message
-from AgentDropout.llm.price import cost_count, cost_count_llama3, cost_count_deepseek
-from AgentDropout.llm.llm import LLM
-from AgentDropout.llm.llm_registry import LLMRegistry
+from DAGP.llm.format import Message
+from DAGP.llm.price import cost_count, cost_count_llama3, cost_count_deepseek
+from DAGP.llm.llm import LLM
+from DAGP.llm.llm_registry import LLMRegistry
 
 
 load_dotenv()
-#deepseek_url = "https://api.deepseek.com/v1"
-#deepseek_api = "sk-1c7d1c7c52cb4e9a93a73f97a75fd652"
-#deepseek_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-#deepseek_api = "sk-2e020d74acca41f4afcccb74e389b58c"
-MINE_BASE_URL = "http://localhost:8000/v1"
-MINE_API_KEYS = "EMPTY"
+
 # print(MINE_BASE_URL)
 
 

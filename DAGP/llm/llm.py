@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Union, Optional
 
-from AgentDropout.llm.format import Message
+from DAGP.llm.format import Message
 
 
 class LLM(ABC):

@@ -1,7 +1,7 @@
 from typing import Optional
 from class_registry import ClassRegistry
 
-from AgentDropout.llm.visual_llm import VisualLLM
+from DAGP.llm.visual_llm import VisualLLM
 
 
 class VisualLLMRegistry:

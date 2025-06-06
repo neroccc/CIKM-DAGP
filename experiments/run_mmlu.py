@@ -7,13 +7,13 @@ from typing import Union, Literal, List
 import argparse
 import random
 
-from AgentDropout.graph.graph import Graph
+from DAGP.graph.graph import Graph
 from datasets.mmlu_dataset import MMLUDataset
 from datasets.MMLU.download import download
 from experiments.train_mmlu import train
 from experiments.evaluate_mmlu import evaluate
-from AgentDropout.utils.const import AgentPrune_ROOT
-from AgentDropout.utils.globals import PromptTokens, CompletionTokens
+from DAGP.utils.const import AgentPrune_ROOT
+from DAGP.utils.globals import PromptTokens, CompletionTokens
 import torch
 from ddc import calculate_D
 
