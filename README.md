@@ -37,11 +37,11 @@ base_url = "http://localhost:5000/v1"
 python run.py
 ```
 
-# Quick Start
+5. **Run**:
 
-Run DAGP on GSM8K (other datasets are similar): 
+Run DAGP on HumanEval (other datasets are similar): 
 ```bash
-python experiments/run_gsm8k.py \
+python experiments/run_humaneval.py \
   --agent_nums 5 \
   --mode FullConnected \
   --batch_size 40 \
